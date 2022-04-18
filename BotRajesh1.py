@@ -5,9 +5,10 @@ import nltk
 import language_tool_python
 import mysql.connector
 import os
+import sqlite3
+import datetime
 
 from os import environ
-from datetime import datetime
 from nltk.tag import pos_tag
 from nltk.tokenize import TweetTokenizer
 
@@ -52,13 +53,18 @@ def getSourceTweet(tweet): #Gets source tweet (used in case of retweets)
     if tweet is None: 
         return None
     if hasattr(tweet, 'retweeted_status') and not hasattr(tweet, 'quoted_status'):
-        return api.get_status(id = tweet.retweeted_status.id)
+        return getSourceTweet(api.get_status(id = tweet.retweeted_status.id, tweet_mode = 'extended'))
     if hasattr(tweet, 'quoted_status'):
-        return api.get_status(id = tweet.quoted_status_id)
-    return tweet
+        return getSourceTweet(api.get_status(id = tweet.quoted_status_id, tweet_mode = 'extended'))
+    return tweet#api.get_status(id = tweet.id, tweet_mode ='extended')
 
 def followTweeter(tweet):#follows user who tweeted said tweet
     follow(tweet.user.id)
+    return
+
+def followTweetMentions(tweet):
+    for user in tweet.entities['user_mentions']:
+        follow(user['id'])
     return
     
 def getTimelineTweets(): #Gets timeline and returns all tweets
@@ -69,6 +75,7 @@ def getTimelineTweets(): #Gets timeline and returns all tweets
         ogtweet = getSourceTweet(tweet)
         hypeMeUp(ogtweet)
         followTweeter(ogtweet)
+        followTweetMentions(ogtweet)
         returnedtweets.append(ogtweet)
     return returnedtweets
 
@@ -108,27 +115,64 @@ def tweetsTagger(tweets): #Tokenizes and tags the tweets
             text = str(tweet.full_text)
         else:
             text = str(tweet.text)
-        print(text)
         tt = TweetTokenizer()
         tweetTokenized = tt.tokenize(text.replace("’","'"))
-        print(tweetTokenized)
         tweetTagged = pos_tag(tweetTokenized)
         tweetsTagged.append(tweetTagged)
     return tweetsTagged
 
+def parseStructure(tweetsTagged):
+    structure = []
+    for tweet in tweetsTagged:
+        sentance = []
+        for word in tweet:
+            sentance.append(word[1])
+        structure.append(sentance)
+    return structure
 
+def addWordsToDatabase(tweetsTagged):
+    if tweetsTagged is None:
+        return
+    dbConn = sqlite3.connect("RajeshBot1.db")
+    dbCursor = dbConn.cursor()
+    for tweet in tweetsTagged:
+        for word in tweet: #clean sql injections
+            if word is None:
+                continue
+            w = "\'"+word[0].replace("'", "''")+"\'"
+            dbCursor.execute("SELECT * FROM Words WHERE Word = " + str(w))
+            exists = dbCursor.fetchone()
+            if(exists is not None):
+                print(exists[3])
+                dbCursor.execute("UPDATE Words SET "
+                                 + "Frequency = " + str("\'"+str(int(exists[3]+1))+"\'") #+ ","
+                                 + " WHERE WordID = " + str("\'"+str(exists[0])+"\'"))
+            else:
+                currentDateTime = datetime.datetime.now()
+                print(str(currentDateTime))
+                dbCursor.execute("INSERT INTO Words(Word, PartOfSpeech, Frequency, DateFirstOccurred, TimesPicked) VALUES ("
+                                 + w + ","
+                                 + str("\'"+word[1]+"\'") + ","
+                                 + "1" + ","
+                                 + str("\'"+str(currentDateTime)+"\'") + ","
+                                 + "0" + ")")
+            exists = None
+    dbConn.commit()
+    dbCursor.close()
+    return
+    
 tweets = getTimelineTweets()
 
-#db = mysql.connector.connect(
-#    host="localhost",
-#    user="root",
-#    passwd= os.environ.get('local_sql_pass'),
-#    database="TwitterBot1"
-#)
 
-#TwitterBotDB = db.cursor()
-#TwitterBotDB.execute("CREATE TABLE Words (word VARCHAR(20), occurances int UNSIGNED, partofspeech VARCHAR(4), )")
+
+
+
 
 
 tweetsTagged = tweetsTagger(tweets)
 print(tweetsTagged)
+addWordsToDatabase(tweetsTagged)
+
+structure = parseStructure(tweetsTagged)
+print("\n\n")
+print(structure)
