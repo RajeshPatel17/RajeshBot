@@ -79,8 +79,8 @@ def getTimelineTweets(): #Gets timeline and returns all tweets
         storeLastSeenID(FILE_NAME,tweet.id)
         ogtweet = getSourceTweet(tweet)
         hypeMeUp(ogtweet)
-        #followTweeter(ogtweet)
-        #followTweetMentions(ogtweet)
+        followTweeter(ogtweet)
+        followTweetMentions(ogtweet)
         returnedtweets.append(ogtweet)
     return returnedtweets
 
@@ -192,20 +192,29 @@ def addStructureToDatabase(sentanceStructures):
 def getRandomStructure():
       dbConn = sqlite3.connect("RajeshBot1.db")
       dbCursor = dbConn.cursor()
-      dbCursor.execute("SELECT Structure FROM Structures")
+      dbCursor.execute("SELECT StructureID, Structure, TimesPicked FROM Structures")
       structures = dbCursor.fetchall()
-      randomStruct = structures[random.randrange(0, len(structures))]
-      return randomStruct[0]
+      num = random.randrange(0, len(structures))
+      randomStruct = structures[num]
+      dbCursor.execute("UPDATE Structures SET "
+                       + "TimesPicked = " + str("\'"+str(int(randomStruct[2]+1))+"\'")
+                       + "WHERE StructureID = " + str("\'"+str(randomStruct[0])+"\'"))
+      dbConn.commit()
+      return randomStruct[1]
 
 def getWordsFillStructure(structure):
     tweet = ""
     dbConn = sqlite3.connect("RajeshBot1.db")
     dbCursor = dbConn.cursor()
     for pos in structure.strip().split(" "):
-        print(pos)
-        dbCursor.execute("SELECT Word FROM Words WHERE PartOfSpeech = " + str("\'"+pos+"\'"))
+        dbCursor.execute("SELECT WordID, Word, TimesPicked FROM Words WHERE PartOfSpeech = " + str("\'"+pos+"\'"))
         wordList = dbCursor.fetchall()
-        tweet = tweet + " " + wordList[random.randrange(0, len(wordList))][0]
+        word = wordList[random.randrange(0, len(wordList))]
+        tweet = tweet + " " + word[1]
+        dbCursor.execute("UPDATE Words SET "
+                         + "TimesPicked = " + str("\'"+str(int(word[2]+1))+"\'")
+                         + "WHERE WordID = " + str("\'"+str(word[0])+"\'"))
+    dbConn.commit()
     return tweet
       
 tweets = getTimelineTweets()
