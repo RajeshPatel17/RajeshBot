@@ -1,4 +1,5 @@
 import tweepy
+import random
 import time
 import requests
 import nltk
@@ -8,9 +9,13 @@ import os
 import sqlite3
 import datetime
 
+#import random as rand
+
 from os import environ
 from nltk.tag import pos_tag
 from nltk.tokenize import TweetTokenizer
+#from random import Random
+
 
 consumer_key = os.environ.get('twitterbot1_consumer_key')
 consumer_secret = os.environ.get('twitterbot1_consumer_secret')
@@ -74,8 +79,8 @@ def getTimelineTweets(): #Gets timeline and returns all tweets
         storeLastSeenID(FILE_NAME,tweet.id)
         ogtweet = getSourceTweet(tweet)
         hypeMeUp(ogtweet)
-        followTweeter(ogtweet)
-        followTweetMentions(ogtweet)
+        #followTweeter(ogtweet)
+        #followTweetMentions(ogtweet)
         returnedtweets.append(ogtweet)
     return returnedtweets
 
@@ -104,7 +109,6 @@ def hypeMeUp(tweet): #Likes and retweets tweet from my main account
             api.retweet(tweet.id)
             api.create_favorite(tweet.id)
     return
-
 
 def tweetsTagger(tweets): #Tokenizes and tags the tweets
     from nltk.tokenize import TweetTokenizer
@@ -142,14 +146,12 @@ def addWordsToDatabase(tweetsTagged):
             w = "\'"+word[0].replace("'", "''")+"\'"
             dbCursor.execute("SELECT * FROM Words WHERE Word = " + str(w))
             exists = dbCursor.fetchone()
-            if(exists is not None):
-                print(exists[3])
+            if exists is not None:
                 dbCursor.execute("UPDATE Words SET "
                                  + "Frequency = " + str("\'"+str(int(exists[3]+1))+"\'") #+ ","
                                  + " WHERE WordID = " + str("\'"+str(exists[0])+"\'"))
             else:
                 currentDateTime = datetime.datetime.now()
-                print(str(currentDateTime))
                 dbCursor.execute("INSERT INTO Words(Word, PartOfSpeech, Frequency, DateFirstOccurred, TimesPicked) VALUES ("
                                  + w + ","
                                  + str("\'"+word[1]+"\'") + ","
@@ -158,21 +160,66 @@ def addWordsToDatabase(tweetsTagged):
                                  + "0" + ")")
             exists = None
     dbConn.commit()
-    dbCursor.close()
     return
-    
+
+def addStructureToDatabase(sentanceStructures):
+    if sentanceStructures is None:
+        return
+    dbConn = sqlite3.connect("RajeshBot1.db")
+    dbCursor = dbConn.cursor()
+    for sentanceStruct in sentanceStructures:
+        thisSentanceStruct = ""
+        for wordStruct in sentanceStruct:
+            thisSentanceStruct = thisSentanceStruct + " " + wordStruct
+        tss = "\'"+thisSentanceStruct+"\'"
+        dbCursor.execute("SELECT * FROM Structures WHERE Structure = " + str(tss))
+        exists = dbCursor.fetchone()
+        if exists is not None:
+            dbCursor.execute("UPDATE Structures SET " 
+                            + "Frequency = " + str("\'"+str(int(exists[2]+1))+"\'")
+                            + " WHERE StructureID = " + str("\'"+str(exists[0])+"\'"))
+        else:
+            currentDateTime = datetime.datetime.now()
+            dbCursor.execute("INSERT INTO Structures(Structure, Frequency, DateFirstOccurred, TimesPicked) VALUES("
+                             + tss + ","
+                             + "1" + ","
+                             + str("\'"+str(currentDateTime)+"\'") + ","
+                             "0" + ")")
+        exists = None
+    dbConn.commit()
+    return
+
+def getRandomStructure():
+      dbConn = sqlite3.connect("RajeshBot1.db")
+      dbCursor = dbConn.cursor()
+      dbCursor.execute("SELECT Structure FROM Structures")
+      structures = dbCursor.fetchall()
+      randomStruct = structures[random.randrange(0, len(structures))]
+      return randomStruct[0]
+
+def getWordsFillStructure(structure):
+    tweet = ""
+    dbConn = sqlite3.connect("RajeshBot1.db")
+    dbCursor = dbConn.cursor()
+    for pos in structure.strip().split(" "):
+        print(pos)
+        dbCursor.execute("SELECT Word FROM Words WHERE PartOfSpeech = " + str("\'"+pos+"\'"))
+        wordList = dbCursor.fetchall()
+        tweet = tweet + " " + wordList[random.randrange(0, len(wordList))][0]
+    return tweet
+      
 tweets = getTimelineTweets()
-
-
-
-
-
-
-
 tweetsTagged = tweetsTagger(tweets)
-print(tweetsTagged)
+#print(tweetsTagged)
 addWordsToDatabase(tweetsTagged)
 
 structure = parseStructure(tweetsTagged)
-print("\n\n")
-print(structure)
+addStructureToDatabase(structure)
+buildStructure = getRandomStructure()
+sendTweet = getWordsFillStructure(buildStructure)
+postTweet(sendTweet)
+
+
+
+#print("\n\n")
+#print(structure)
